@@ -7,12 +7,18 @@ So far, this repository contains code for reading the following datasets:
 
 Brain datasets:
 <ul style="list-style-type:square;">
-  <li>HCP (http://www.humanconnectomeproject.org/) [labels generated via FreeSurfer]. For this dataset, there are T1w and T2w images for each subject.</li>
-  <li>ABIDE (http://fcon_1000.projects.nitrc.org/indi/abide/). This dataset contains T1w images from several scanners. So far, we have pre-processed the data from two of these - Caltech and Stanford. Labels have been generated via FreeSurfer. </li>
+  <li>HCP (http://www.humanconnectomeproject.org/) [labels generated via FreeSurfer]. For this dataset, there are T1w and T2w images for each subject. Segmentation labels have been generated via FreeSurfer. </li>
+  <li>ABIDE (http://fcon_1000.projects.nitrc.org/indi/abide/). This dataset contains T1w images from several scanners. So far, we have pre-processed the data from two of these - Caltech and Stanford. Segmentation labels have been generated via FreeSurfer. </li>
 </ul>
 
-Brain datasets:
+Cardiac datasets:
 <ul style="list-style-type:square;">
-  <li>HCP (http://www.humanconnectomeproject.org/) [labels generated via FreeSurfer]. For this dataset, there are T1w and T2w images for each subject.</li>
-  <li>ABIDE (http://fcon_1000.projects.nitrc.org/indi/abide/). This dataset contains T1w images from several scanners. So far, we have pre-processed the data from two of these - Caltech and Stanford. Labels have been generated via FreeSurfer. </li>
+  <li>ACDC (https://www.creatis.insa-lyon.fr/Challenge/acdc/). </li>
+  <li>RVSC (http://rvsc.projets.litislab.fr/). </li>
+</ul>
+
+Prostate datasets:
+<ul style="list-style-type:square;">
+  <li>NCI (https://wiki.cancerimagingarchive.net/display/Public/NCI-ISBI+2013+Challenge+-+Automated+Segmentation+of+Prostate+Structures). </li>
+  <li>PIRAD (Private dataset from Universsity Hospital of Zurich). </li>
 </ul>
