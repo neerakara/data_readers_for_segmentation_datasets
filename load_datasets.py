@@ -10,24 +10,25 @@ import data_prostate_nci
 import data_prostate_pirad_erc
 
 # ============================
-# 
+# main function that redirects the data loading to the requested anatomy and dataset
 # ============================   
 def load_dataset(anatomy,
                  dataset,
                  train_test_validation):
 
     # =====================================
-    # 
+    # brain datasets
     # =====================================
     if anatomy is 'brain':
 
         # =====================================
-        # 
+        # HCP
         # =====================================
         if (dataset is 'HCP_T1') or (dataset is 'HCP_T2'):
         
             # =====================================
-            # subject ids for the train, test and validation subsets
+            # subject ids for the train, test and validation subsets.
+            # change indices of train-test-validation split, if required.
             # =====================================
             if train_test_validation is 'train':
                 idx_start = 0
@@ -51,14 +52,22 @@ def load_dataset(anatomy,
                 protocol = 'T2'
             
             # =====================================
-            # 
+            # Set the desired resolution and image size here.
+            # Currently, the pre-processing is set up for rescaling coronal slices to this target resolution and target image size,
+            # while keeping the resolution perpendicular to the coronal slices at its original value.
             # =====================================
             image_size = (256, 256)
             target_resolution = (0.7, 0.7)
+            
+            # =====================================
+            # The depth parameter indicates the number of coronal slices in each image volume.
+            # All image volumes are cropped from the edges or padded with zeros, in order to ensure that they have the same number of coronal slices,
+            # keeping the resolution in this direction the same as in the original images.
+            # =====================================
             image_depth = 256
               
             # =====================================
-            # 
+            # pre-processing function that returns a hdf5 handle containing the images and labels
             # =====================================
             data_brain = data_brain_hcp.load_and_maybe_process_data(input_folder = datapaths.orig_dir_hcp,
                                                                     preprocessing_folder = datapaths.preproc_dir_hcp,
@@ -120,7 +129,8 @@ def load_dataset(anatomy,
                                                                       target_resolution = target_resolution)
         
         # =====================================  
-        # 
+        # Extract images and labels from the hdf5 handle and return these.
+        # If desired, the original resolutions of the images and original image sizes, as well as patient ids are also stored in the hdf5 file.
         # =====================================  
         images = data_brain['images']
         labels = data_brain['labels']
