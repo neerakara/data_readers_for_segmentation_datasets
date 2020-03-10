@@ -37,14 +37,16 @@ def copy_files_to_local_directory_and_correct_bias_field(src_folder,
         if not os.path.exists(dst_folder_this_patient):
             os.makedirs(dst_folder_this_patient)
             
-        # copy image and labels
-        for suffix in ['/MPRAGE.nii', '/orig_labels_aligned_with_true_image.nii.gz']:
-            copyfile(src_folder_this_patient + suffix , dst_folder_this_patient + suffix) 
-            
+        # copy image
+        suffix = '/MPRAGE.nii'
+        copyfile(src_folder_this_patient + suffix, dst_folder_this_patient + suffix) 
+        
+        # copy labels
+        suffix = '/orig_labels_aligned_with_true_image.nii.gz'
+        copyfile(src_folder_this_patient + suffix, dst_folder_this_patient + suffix) 
+
         # correct bias field for the image
-        subprocess.call(["/usr/bmicnas01/data-biwi-01/bmicdatasets/Sharing/N4_th",
-                         dst_folder_this_patient + '/MPRAGE.nii',
-                         dst_folder_this_patient + '/MPRAGE_n4.nii'])
+        subprocess.call(["/usr/bmicnas01/data-biwi-01/bmicdatasets/Sharing/N4_th", dst_folder_this_patient + '/MPRAGE.nii', dst_folder_this_patient + '/MPRAGE_n4.nii'])
                         
 # ===============================================================
 # Helper function to get paths to the image and label file
@@ -422,10 +424,7 @@ def load_without_size_preprocessing(input_folder,
     # Skull stripping by setting all background pixels to 0
     # cropping to center image in the coronal slices
     # fixing the number of coronal slices to 'depth'
-    # normalization to [0-1].
-    
-# Set the 'first_run' option to True for the first run. This copies the files from the bmicnas server
-# into a local directory (preprocessing folder) and carries out bias field correction using N4.
+    # normalization to [0-1].    
 # ===============================================================
 def load_and_maybe_process_data(input_folder,
                                 preprocessing_folder,
@@ -436,21 +435,28 @@ def load_and_maybe_process_data(input_folder,
                                 size,
                                 depth,
                                 target_resolution,
-                                force_overwrite = False,
-                                first_run = False):
+                                force_overwrite = False):
     
-    # for the 1st run, copy the files to a local directory and run bias field correction on the images.
-    if first_run is True:
-        if site_name is 'caltech':
-            list_of_patients_to_skip = ['A00033264', 'A00033493']
-        else:
-            list_of_patients_to_skip = ['A00033547']
-        logging.info('Copying files to local directory and carrying out bias field correction...')
-        copy_files_to_local_directory_and_correct_bias_field(src_folder = input_folder + site_name + '/nifti/',
-                                                             dst_folder = preprocessing_folder + site_name + '/',
-                                                             list_of_patients_to_skip = list_of_patients_to_skip)
+    # ==============================================
+    # Set the 'first_run' option to True for the first run. This copies the files from the bmicnas server
+    # into a local directory (preprocessing folder) and carries out bias field correction using N4.
+    # For the 1st run, copy the files to a local directory and run bias field correction on the images.
+    # ==============================================
+    # This is not required now. we have already done bias correction and saved the corresponding images in the input_folder.
+    # ==============================================
+    # if first_run is True:
+    #    if site_name is 'caltech':
+    #        list_of_patients_to_skip = ['A00033264', 'A00033493']
+    #    else:
+    #        list_of_patients_to_skip = ['A00033547']
+    #    logging.info('Copying files to local directory and carrying out bias field correction...')
+    #    copy_files_to_local_directory_and_correct_bias_field(src_folder = input_folder + site_name + '/nifti/',
+    #                                                         dst_folder = preprocessing_folder + site_name + '/',
+    #                                                         list_of_patients_to_skip = list_of_patients_to_skip)
     
+    # ==============================================
     # now, pre-process the data
+    # ==============================================
     size_str = '_'.join([str(i) for i in size])
     res_str = '_'.join([str(i) for i in target_resolution])
     preprocessing_folder = preprocessing_folder + site_name + '/'
@@ -471,6 +477,7 @@ def load_and_maybe_process_data(input_folder,
                      depth,
                      target_resolution,
                      preprocessing_folder)
+    
     else:
         logging.info('Already preprocessed this configuration. Loading now!')
 
