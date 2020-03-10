@@ -136,8 +136,7 @@ def load_dataset(anatomy,
                                                                       size = image_size,
                                                                       depth = image_depth,
                                                                       target_resolution = target_resolution,
-                                                                      force_overwrite = False,
-                                                                      first_run = first_run) # <-- SET TO TRUE FOR THE FIRST RUN
+                                                                      force_overwrite = False)
         
         # =====================================  
         # Extract images and labels from the hdf5 handle and return these.
