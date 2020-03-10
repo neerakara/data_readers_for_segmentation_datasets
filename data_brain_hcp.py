@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 MAX_WRITE_BUFFER = 5
 
 # ===============================================================
+# helper function to get paths to the image and label of a certain subject
 # ===============================================================
 def get_image_and_label_paths(filename,
                               protocol,
@@ -40,7 +41,16 @@ def get_image_and_label_paths(filename,
                 if re.search(r'\.gz$', name) != None:                        
                 
                     # ========================
-                    # get the protocol image
+                    # Get the image of the desired protocol.
+                    # This image is the one after the 'preFreeSurfer' preprocessing steps done by FreeSurfer
+                    # For details, see https://www.ncbi.nlm.nih.gov/pubmed/23668970 Figure 9.
+                    # This includes 
+                    #       * correction of MR gradientnonlinearity-induced distortions
+                    #       * repeated runs of T1w and T2w images are aligned with a 6 DOF rigid body transformation using FLIRT, and averaged. 
+                    #       * next, the average T1w and T2w images are aligned to the MNI space template (with 0.7mm resolution for the HCP data) (“acpc alignment” step)
+                    #       * next, a robust initial brain extraction (skull stripping) is performed using an initial linear (FLIRT) and non-linear (FNIRT) registration of the image to the MNI template.
+                    #       * removal of readout distortion
+                    #       * bias field correction
                     # ========================
                     if re.search(protocol + 'w_acpc_dc_restore_brain', name) != None:                                         
                         _imgpath = zfile.extract(name, extraction_folder) # extract the image filepath                        
@@ -56,6 +66,7 @@ def get_image_and_label_paths(filename,
     return _patname, _imgpath, _segpath
                             
 # ===============================================================
+# helper function to count number of slices perpendicular to the coronal slices (this is fixed to the 'depth' parameter for each image volume)
 # ===============================================================
 def count_slices(filenames,
                  idx_start,
@@ -66,20 +77,16 @@ def count_slices(filenames,
 
     num_slices = 0
     
-    for idx in range(idx_start, idx_end):    
-        
-        _, image_path, _ = get_image_and_label_paths(filenames[idx],
-                                                     protocol,
-                                                     preprocessing_folder)
-        
-        image, _, _ = utils.load_nii(image_path)
-        
+    for idx in range(idx_start, idx_end):
+        # _, image_path, _ = get_image_and_label_paths(filenames[idx], protocol, preprocessing_folder)
+        # image, _, _ = utils.load_nii(image_path)        
         # num_slices = num_slices + image.shape[1] # will append slices along axes 1
         num_slices = num_slices + depth # the number of slices along the append axis will be fixed to this number to crop out zeros
         
     return num_slices
 
 # ===============================================================
+# This function carries out all the pre-processing steps
 # ===============================================================
 def prepare_data(input_folder,
                  output_file,
@@ -98,6 +105,7 @@ def prepare_data(input_folder,
     logging.info('Number of images in the dataset: %s' % str(len(filenames)))
 
     # =======================
+    # create a new hdf5 file
     # =======================
     hdf5_file = h5py.File(output_file, "w")
 
@@ -112,6 +120,9 @@ def prepare_data(input_folder,
                               preprocessing_folder,
                               depth)
     
+    # ===============================
+    # the sizes of the image and label arrays are set as: [(number of coronal slices per subject*number of subjects), size of coronal slices]
+    # ===============================
     data['images'] = hdf5_file.create_dataset("images", [num_slices] + list(size), dtype=np.float32)
     data['labels'] = hdf5_file.create_dataset("labels", [num_slices] + list(size), dtype=np.uint8)
     
@@ -128,7 +139,8 @@ def prepare_data(input_folder,
     pz_list = []
     pat_names_list = []
     
-    # ===============================        
+    # ===============================      
+    # initialize counters
     # ===============================        
     write_buffer = 0
     counter_from = 0
@@ -217,9 +229,14 @@ def prepare_data(input_folder,
             image_list.append(image2d_rescaled_rotated_cropped)
             label_list.append(label2d_rescaled_rotated_cropped)
 
+            # ============   
+            # increment counter
+            # ============   
             write_buffer += 1
 
+            # ============   
             # Writing needs to happen inside the loop over the slices
+            # ============   
             if write_buffer >= MAX_WRITE_BUFFER:
 
                 counter_to = counter_from + write_buffer
@@ -233,10 +250,15 @@ def prepare_data(input_folder,
                 _release_tmp_memory(image_list,
                                     label_list)
 
+                # ============   
                 # update counters 
+                # ============   
                 counter_from = counter_to
                 write_buffer = 0
         
+    # ============   
+    # write leftover data
+    # ============   
     logging.info('Writing remaining data')
     counter_to = counter_from + write_buffer
     _write_range_to_hdf5(data,
@@ -247,7 +269,9 @@ def prepare_data(input_folder,
     _release_tmp_memory(image_list,
                         label_list)
 
-    # Write the small datasets
+    # ============   
+    # Write the small datasets - image resolutions, sizes, patient ids
+    # ============   
     hdf5_file.create_dataset('nx', data=np.asarray(nx_list, dtype=np.uint16))
     hdf5_file.create_dataset('ny', data=np.asarray(ny_list, dtype=np.uint16))
     hdf5_file.create_dataset('nz', data=np.asarray(nz_list, dtype=np.uint16))
@@ -256,7 +280,9 @@ def prepare_data(input_folder,
     hdf5_file.create_dataset('pz', data=np.asarray(pz_list, dtype=np.float32))
     hdf5_file.create_dataset('patnames', data=np.asarray(pat_names_list, dtype="S10"))
     
-    # After test train loop:
+    # ============   
+    # close the hdf5 file
+    # ============   
     hdf5_file.close()
 
 # ===============================================================
@@ -288,6 +314,11 @@ def _release_tmp_memory(img_list,
     
 # ===============================================================
 # function to read a single subjects image and labels without any pre-processing
+#  returns an image volume as [nx, ny, nz], where
+#      [nx, ny] is the image size of the coronal slices (kept the same as in the original images)
+#      nz id the number of coronal slices (fixed by cropping / padding to 'depth)
+# the image are normalized to [0-1].
+# the segmentation labels are grouped into 15 classes.
 # ===============================================================
 def load_without_size_preprocessing(input_folder,
                                     idx,
@@ -330,6 +361,17 @@ def load_without_size_preprocessing(input_folder,
     return image, label
 
 # ===============================================================
+# Main function that preprocesses images and labels and returns a handle to a hdf5 file containing them.
+# The images and labels are returned as [num_subjects*nz, nx, ny],
+#   where nz is the number of coronal slices per subject ('depth')
+#         nx, ny is the size of the coronal slices ('size')  
+#         the resolution in the coronal slices is 'target_resolution'
+#         the resolution perpendicular to coronal slices is unchanged.
+# The read images are the ones from after the 'PreFreeSurfer' preprocessing pipeline.
+    # So, they have undergone several pre-processing steps (including skull stripping and bias field correction)
+    # For details, see the comments in the get_image_and_label_paths function.
+# Each image volume is normalized to [0-1].
+# The segmentation labels are grouped into 15 classes.    
 # ===============================================================
 def load_and_maybe_process_data(input_folder,
                                 preprocessing_folder,
