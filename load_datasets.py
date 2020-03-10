@@ -14,7 +14,8 @@ import data_prostate_pirad_erc
 # ============================   
 def load_dataset(anatomy,
                  dataset,
-                 train_test_validation):
+                 train_test_validation,
+                 first_run = False): # <-- SET TO TRUE FOR THE FIRST RUN OF A PARTICULAR DATASET
 
     # =====================================
     # brain datasets
@@ -60,7 +61,7 @@ def load_dataset(anatomy,
             target_resolution = (0.7, 0.7)
             
             # =====================================
-            # The depth parameter indicates the number of coronal slices in each image volume.
+            # The image_depth parameter indicates the number of coronal slices in each image volume.
             # All image volumes are cropped from the edges or padded with zeros, in order to ensure that they have the same number of coronal slices,
             # keeping the resolution in this direction the same as in the original images.
             # =====================================
@@ -79,12 +80,13 @@ def load_dataset(anatomy,
                                                                     target_resolution = target_resolution)
             
         # =====================================
-        # 
+        # ABIDE
         # =====================================
         elif (dataset is 'ABIDE_caltech') or (dataset is 'ABIDE_stanford'):
         
             # =====================================
             # subject ids for the train, test and validation subsets
+            # change indices of train-test-validation split, if required.
             # =====================================
             if train_test_validation is 'train':
                 idx_start = 0
@@ -97,9 +99,22 @@ def load_dataset(anatomy,
             elif train_test_validation is 'test':
                 idx_start = 16
                 idx_end = 36
+                        
+            # =====================================
+            # Set the desired resolution and image size here.
+            # Currently, the pre-processing is set up for rescaling coronal slices to this target resolution and target image size,
+            # while keeping the resolution perpendicular to the coronal slices at its original value.
+            # =====================================
+            image_size = (256, 256)
+            target_resolution = (0.7, 0.7)
             
             # =====================================
             # within the ABIDE dataset, there are multiple T1 datasets - we have preprocessed the data from 2 of these so far.
+            # =====================================
+            # =====================================
+            # The image_depth parameter indicates the number of coronal slices in each image volume.
+            # All image volumes are cropped from the edges or padded with zeros, in order to ensure that they have the same number of coronal slices,
+            # keeping the resolution in this direction the same as in the original images.
             # =====================================
             if dataset is 'ABIDE_caltech':
                 site_name = 'caltech'
@@ -108,15 +123,9 @@ def load_dataset(anatomy,
             elif dataset is 'ABIDE_stanford':
                 site_name = 'stanford'
                 image_depth = 132
-            
-            # =====================================
-            # 
-            # =====================================
-            image_size = (256, 256)
-            target_resolution = (0.7, 0.7)
               
             # =====================================
-            # 
+            # pre-processing function that returns a hdf5 handle containing the images and labels
             # =====================================            
             data_brain = data_brain_abide.load_and_maybe_process_data(input_folder = datapaths.orig_dir_abide,
                                                                       preprocessing_folder = datapaths.preproc_dir_abide,
@@ -126,7 +135,9 @@ def load_dataset(anatomy,
                                                                       protocol = 'T1',
                                                                       size = image_size,
                                                                       depth = image_depth,
-                                                                      target_resolution = target_resolution)
+                                                                      target_resolution = target_resolution,
+                                                                      force_overwrite = False,
+                                                                      first_run = first_run) # <-- SET TO TRUE FOR THE FIRST RUN
         
         # =====================================  
         # Extract images and labels from the hdf5 handle and return these.
@@ -134,8 +145,7 @@ def load_dataset(anatomy,
         # =====================================  
         images = data_brain['images']
         labels = data_brain['labels']
-            
-            
+                        
     # =====================================
     # 
     # =====================================
