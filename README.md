@@ -20,5 +20,5 @@ Cardiac datasets:
 Prostate datasets:
 <ul style="list-style-type:square;">
   <li>NCI (https://wiki.cancerimagingarchive.net/display/Public/NCI-ISBI+2013+Challenge+-+Automated+Segmentation+of+Prostate+Structures). </li>
-  <li>PIRAD (Private dataset from Universsity Hospital of Zurich). </li>
+  <li>PIRAD (Private dataset from University Hospital of Zurich). </li>
 </ul>
