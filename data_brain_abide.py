@@ -15,49 +15,25 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 MAX_WRITE_BUFFER = 5
 
 # =============================================================================================
-# FUNCTION FOR COPYING RELEVANT FILES FROM DIFFERENT SITES TO THE LOCAL DISK
+# Function for copying the images and labels to a local directory and carrying out bias field correction using N4
 # =============================================================================================
-def copy_site_files_abide_caltech():
-     
-    src_folder = '/usr/bmicnas01/data-biwi-01/nkarani/projects/hcp_segmentation/data/preproc_data/abide/caltech/'
-    dst_folder = '/usr/bmicnas01/data-biwi-01/nkarani/projects/generative_segmentation/data/preproc_data/abide/CALTECH/'
+def copy_files_to_local_directory_and_correct_bias_field(src_folder,
+                                                         dst_folder,
+                                                         list_of_patients_to_skip):
+
     src_folders_list = sorted(glob.glob(src_folder + '*/'))
     
     # set the destination for this site
     for patient_num in range(len(src_folders_list)):
         
-        patient_name = src_folders_list[patient_num][:-1][src_folders_list[patient_num][:-1].rfind('/')+1:]
+        patient_name = src_folders_list[patient_num][:-1][src_folders_list[patient_num][:-1].rfind('/')+1:]                
+        logging.info('Patient: %d out of %d' % (patient_num+1, len(src_folders_list)))
+
+        if patient_name in list_of_patients_to_skip:
+            continue        
+
         src_folder_this_patient = src_folder + patient_name
         dst_folder_this_patient = dst_folder + patient_name
-                
-        if patient_name in ['A00033264', 'A00033493']:
-            continue
-        
-        if not os.path.exists(dst_folder_this_patient):
-            os.makedirs(dst_folder_this_patient)
-            
-        # copy image and labels
-        for suffix in ['/MPRAGE.nii', '/MPRAGE_n4.nii', '/orig_labels_aligned_with_true_image.nii.gz']:
-            copyfile(src_folder_this_patient + suffix , dst_folder_this_patient + suffix ) 
-            
-# =============================================================================================
-# =============================================================================================
-def copy_site_files_abide_stanford():
-     
-    src_folder = '/usr/bmicnas01/data-biwi-01/nkarani/projects/hcp_segmentation/data/preproc_data/abide/stanford/'
-    dst_folder = '/usr/bmicnas01/data-biwi-01/nkarani/projects/generative_segmentation/data/preproc_data/abide/STANFORD/'
-    src_folders_list = sorted(glob.glob(src_folder + '*/'))
-    
-    # set the destination for this site
-    for patient_num in range(len(src_folders_list)):
-        
-        patient_name = src_folders_list[patient_num][:-1][src_folders_list[patient_num][:-1].rfind('/')+1:]
-        src_folder_this_patient = src_folder + patient_name
-        dst_folder_this_patient = dst_folder + patient_name
-        
-        if patient_name in ['A00033547']:
-            continue
-        
         if not os.path.exists(dst_folder_this_patient):
             os.makedirs(dst_folder_this_patient)
             
@@ -65,22 +41,13 @@ def copy_site_files_abide_stanford():
         for suffix in ['/MPRAGE.nii', '/orig_labels_aligned_with_true_image.nii.gz']:
             copyfile(src_folder_this_patient + suffix , dst_folder_this_patient + suffix) 
             
-# =============================================================================================
-# =============================================================================================
-def correct_bias_field():
-    
-    base_folder = '/usr/bmicnas01/data-biwi-01/nkarani/projects/generative_segmentation/data/preproc_data/abide/STANFORD/'
-    folders_list = sorted(glob.glob(base_folder + '*/'))
-    
-    for num_subject in range(len(folders_list)):
-        print('============================================')
-        print('subject ' + str(num_subject+1) + ' out of ' + str(len(folders_list)))
-        print('============================================')
-        input_img = folders_list[num_subject] + "MPRAGE.nii"
-        output_img = folders_list[num_subject] + "MPRAGE_n4.nii"
-        subprocess.call(["/usr/bmicnas01/data-biwi-01/bmicdatasets/Sharing/N4_th", input_img, output_img])
-            
+        # correct bias field for the image
+        subprocess.call(["/usr/bmicnas01/data-biwi-01/bmicdatasets/Sharing/N4_th",
+                         dst_folder_this_patient + '/MPRAGE.nii',
+                         dst_folder_this_patient + '/MPRAGE_n4.nii'])
+                        
 # ===============================================================
+# Helper function to get paths to the image and label file
 # ===============================================================
 def get_image_and_label_paths(filename,
                               protocol = '',
@@ -93,6 +60,7 @@ def get_image_and_label_paths(filename,
     return _patname, _imgpath, _segpath
                             
 # ===============================================================
+# helper function to count number of slices perpendicular to the coronal slices (this is fixed to the 'depth' parameter for each image volume)
 # ===============================================================
 def count_slices(filenames,
                  idx_start,
@@ -104,18 +72,16 @@ def count_slices(filenames,
     num_slices = 0
     
     for idx in range(idx_start, idx_end):    
-        
-        _, image_path, _ = get_image_and_label_paths(filenames[idx],
-                                                     protocol,
-                                                     preprocessing_folder)
-        
-        image, _, _ = utils.load_nii(image_path)
-        
+        # _, image_path, _ = get_image_and_label_paths(filenames[idx])        
+        # image, _, _ = utils.load_nii(image_path)        
         # num_slices = num_slices + image.shape[1] # will append slices along axes 1
         num_slices = num_slices + depth # the number of slices along the append axis will be fixed to this number to crop out zeros
         
     return num_slices
 
+# ===============================================================
+# helper function to center images and labels in the coronal slices
+# ===============================================================
 def center_image_and_label(image, label):
     
     orig_image_size_x = image.shape[0]
@@ -139,6 +105,7 @@ def center_image_and_label(image, label):
     return image_cropped, label_cropped
 
 # ===============================================================
+# This function carries out all the pre-processing steps
 # ===============================================================
 def prepare_data(input_folder,
                  output_file,
@@ -158,6 +125,7 @@ def prepare_data(input_folder,
     logging.info('Number of images in the dataset: %s' % str(len(filenames)))
 
     # =======================
+    # create a new hdf5 file
     # =======================
     hdf5_file = h5py.File(output_file, "w")
 
@@ -172,6 +140,9 @@ def prepare_data(input_folder,
                               preprocessing_folder,
                               depth)
     
+    # ===============================
+    # the sizes of the image and label arrays are set as: [(number of coronal slices per subject*number of subjects), size of coronal slices]
+    # ===============================
     data['images'] = hdf5_file.create_dataset("images", [num_slices] + list(size), dtype=np.float32)
     data['labels'] = hdf5_file.create_dataset("labels", [num_slices] + list(size), dtype=np.uint8)
     
@@ -188,7 +159,8 @@ def prepare_data(input_folder,
     pz_list = []
     pat_names_list = []
     
-    # ===============================        
+    # ===============================
+    # initialize counters        
     # ===============================        
     write_buffer = 0
     counter_from = 0
@@ -204,16 +176,16 @@ def prepare_data(input_folder,
         patient_name, image_path, label_path = get_image_and_label_paths(filenames[idx])
         
         # ============
-        # read the image and normalize it to be between 0 and 1
+        # read the image
         # ============
         image, _, image_hdr = utils.load_nii(image_path)
-        image = np.swapaxes(image, 1, 2) # swap axes 1 and 2 -> this allows appending along axis 2, as in other datasets
+        image = np.swapaxes(image, 1, 2) # swap axes 1 and 2 -> this makes the coronal slices be in the 0-1 plane
         
         # ==================
         # read the label file
         # ==================        
         label, _, _ = utils.load_nii(label_path)        
-        label = np.swapaxes(label, 1, 2) # swap axes 1 and 2 -> this allows appending along axis 2, as in other datasets
+        label = np.swapaxes(label, 1, 2) # swap axes 1 and 2 -> this makes the coronal slices be in the 0-1 plane
         label = utils.group_segmentation_classes(label) # group the segmentation classes as required
         
         # ============
@@ -231,8 +203,6 @@ def prepare_data(input_folder,
             label = label[:, 80:, :]
         elif site_name is 'stanford':
             image, label = center_image_and_label(image, label)
-            
-        # plt.figure(); plt.imshow(image[:,:,50], cmap='gray'); plt.title(patient_name); plt.show(); plt.close()        
                 
         # ==================
         # crop volume along z axis (as there are several zeros towards the ends)
@@ -295,7 +265,9 @@ def prepare_data(input_folder,
 
             write_buffer += 1
 
+            # ============   
             # Writing needs to happen inside the loop over the slices
+            # ============   
             if write_buffer >= MAX_WRITE_BUFFER:
 
                 counter_to = counter_from + write_buffer
@@ -309,10 +281,15 @@ def prepare_data(input_folder,
                 _release_tmp_memory(image_list,
                                     label_list)
 
+                # ============   
                 # update counters 
+                # ============   
                 counter_from = counter_to
                 write_buffer = 0
         
+    # ============   
+    # write leftover data
+    # ============   
     logging.info('Writing remaining data')
     counter_to = counter_from + write_buffer
     _write_range_to_hdf5(data,
@@ -323,7 +300,9 @@ def prepare_data(input_folder,
     _release_tmp_memory(image_list,
                         label_list)
 
-    # Write the small datasets
+    # ============   
+    # Write the small datasets - image resolutions, sizes, patient ids
+    # ============   
     hdf5_file.create_dataset('nx', data=np.asarray(nx_list, dtype=np.uint16))
     hdf5_file.create_dataset('ny', data=np.asarray(ny_list, dtype=np.uint16))
     hdf5_file.create_dataset('nz', data=np.asarray(nz_list, dtype=np.uint16))
@@ -332,7 +311,9 @@ def prepare_data(input_folder,
     hdf5_file.create_dataset('pz', data=np.asarray(pz_list, dtype=np.float32))
     hdf5_file.create_dataset('patnames', data=np.asarray(pat_names_list, dtype="S10"))
     
-    # After test train loop:
+    # ============   
+    # close the hdf5 file
+    # ============   
     hdf5_file.close()
 
 # ===============================================================
@@ -363,7 +344,7 @@ def _release_tmp_memory(img_list,
     gc.collect()
     
 # ===============================================================
-# function to read a single subjects image and labels without any pre-processing
+# function to read a single subjects image and labels without any shape / resolution related pre-processing
 # ===============================================================
 def load_without_size_preprocessing(input_folder,
                                     site_name,
@@ -381,7 +362,7 @@ def load_without_size_preprocessing(input_folder,
     patient_name, image_path, label_path = get_image_and_label_paths(filenames[idx])
     
     # ============
-    # read the image and normalize it to be between 0 and 1
+    # read the image
     # ============
     image, _, image_hdr = utils.load_nii(image_path)
     image = np.swapaxes(image, 1, 2) # swap axes 1 and 2 -> this allows appending along axis 2, as in other datasets
@@ -423,6 +404,28 @@ def load_without_size_preprocessing(input_folder,
     return image, label
 
 # ===============================================================
+# Main function that preprocesses images and labels and returns a handle to a hdf5 file containing them.
+# The images and labels are returned as [num_subjects*nz, nx, ny],
+#   where nz is the number of coronal slices per subject ('depth')
+#         nx, ny is the size of the coronal slices ('size')  
+#         the resolution in the coronal slices is 'target_resolution'
+#         the resolution perpendicular to coronal slices is unchanged.
+    
+# The segmentations labels are obtained by segmenting the 'MPRAGE.nii.gz' file using Freesurfer.
+    # Freesurfer internally does some registration steps, so the segmentation 'aparc+aseg.mgz' is not aligned with the original image.
+    # To counter this, the image 'orig.mgz' (generated as an intermediate image by FS) is registered with the original image 'MPRAGE.nii.gz'
+    # and the transformation so obtained is applied to the labels 'aparc+aseg.mgz' in order to get 'orig_labels_aligned_with_true_image.nii.gz'
+    # The segmentation labels are then grouped into 15 classes.    
+
+# Each image undergoes the following pre-processing steps:
+    # bias field correction using N4 (using the correct_bias_field() function).
+    # Skull stripping by setting all background pixels to 0
+    # cropping to center image in the coronal slices
+    # fixing the number of coronal slices to 'depth'
+    # normalization to [0-1].
+    
+# Set the 'first_run' option to True for the first run. This copies the files from the bmicnas server
+# into a local directory (preprocessing folder) and carries out bias field correction using N4.
 # ===============================================================
 def load_and_maybe_process_data(input_folder,
                                 preprocessing_folder,
@@ -433,16 +436,26 @@ def load_and_maybe_process_data(input_folder,
                                 size,
                                 depth,
                                 target_resolution,
-                                force_overwrite=False):
-
+                                force_overwrite = False,
+                                first_run = False):
+    
+    # for the 1st run, copy the files to a local directory and run bias field correction on the images.
+    if first_run is True:
+        if site_name is 'caltech':
+            list_of_patients_to_skip = ['A00033264', 'A00033493']
+        else:
+            list_of_patients_to_skip = ['A00033547']
+        logging.info('Copying files to local directory and carrying out bias field correction...')
+        copy_files_to_local_directory_and_correct_bias_field(src_folder = input_folder + site_name + '/nifti/',
+                                                             dst_folder = preprocessing_folder + site_name + '/',
+                                                             list_of_patients_to_skip = list_of_patients_to_skip)
+    
+    # now, pre-process the data
     size_str = '_'.join([str(i) for i in size])
     res_str = '_'.join([str(i) for i in target_resolution])
-    
     preprocessing_folder = preprocessing_folder + site_name + '/'
-
     data_file_name = 'data_%s_2d_size_%s_depth_%d_res_%s_from_%d_to_%d.hdf5' % (protocol, size_str, depth, res_str, idx_start, idx_end)
     data_file_path = os.path.join(preprocessing_folder, data_file_name)
-
     utils.makefolder(preprocessing_folder)
 
     if not os.path.exists(data_file_path) or force_overwrite:
